@@ -2,13 +2,14 @@
 using Java2Dotnet.Spider.Core;
 using Java2Dotnet.Spider.Extension.Configuration;
 using Newtonsoft.Json.Linq;
+using Java2Dotnet.Spider.Extension.Model;
 
 namespace Java2Dotnet.Spider.Extension
 {
 	public class SpiderContext
 	{
 		// build it internal
-		public List<JObject> Entities { get; internal set; } = new List<JObject>();
+		public List<Entity> Entities { get; internal set; } = new List<Entity>();
 
 		public string SpiderName { get; set; }
 		public string UserId { get; set; }
@@ -20,6 +21,7 @@ namespace Java2Dotnet.Spider.Extension
 		public Configuration.Scheduler Scheduler { get; set; }
 		public Configuration.Downloader Downloader { get; set; }
 		public Site Site { get; set; }
+		public bool SkipWhenResultIsEmpty { get; set; } = false;
 		public NetworkValidater NetworkValidater { get; set; }
 		public Redialer Redialer { get; set; }
 		public List<PrepareStartUrls> PrepareStartUrls { get; set; }
@@ -27,6 +29,7 @@ namespace Java2Dotnet.Spider.Extension
 		public Configuration.Pipeline Pipeline { get; set; }
 		public List<PageHandler> PageHandlers { get; set; }
 		public TargetUrlsHandler TargetUrlsHandler { get; set; }
+		public List<Configuration.TargetUrlExtractor> TargetUrlExtractInfos { get; set; }
 		public List<EnviromentValue> EnviromentValues { get; set; }
 		public Validations Validations { get; set; }
 		public CookieTrapper GetCookie { get; set; }

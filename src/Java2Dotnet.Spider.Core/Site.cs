@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Java2Dotnet.Spider.Core.Proxy;
+using System.Net;
 
 namespace Java2Dotnet.Spider.Core
 {
@@ -10,7 +11,6 @@ namespace Java2Dotnet.Spider.Core
 	/// </summary>
 	public class Site
 	{
-		private readonly List<Request> _startRequests = new List<Request>();
 		private ProxyPool _httpProxyPool = new ProxyPool();
 		private string _domain;
 		private Encoding _encoding = Encoding.UTF8;
@@ -95,9 +95,9 @@ namespace Java2Dotnet.Spider.Core
 		/// {200} by default. 
 		/// It is not necessarily to be set.
 		/// </summary>
-		public HashSet<int> AcceptStatCode { get; set; } = new HashSet<int> { 200 };
+		public HashSet<HttpStatusCode> AcceptStatCode { get; set; } = new HashSet<HttpStatusCode> { HttpStatusCode.OK };
 
-		public List<Request> StartRequests => _startRequests;
+		public List<Request> StartRequests { get; set; } = new List<Request>();
 
 		/// <summary>
 		/// Set the interval between the processing of two pages. 
@@ -114,7 +114,7 @@ namespace Java2Dotnet.Spider.Core
 		/// <summary>
 		/// When cycleRetryTimes is more than 0, it will add back to scheduler and try download again. 
 		/// </summary>
-		public int CycleRetryTimes { get; set; } = 20;
+		public int CycleRetryTimes { get; set; } = 5;
 
 		public string Cookie { get; set; }
 
@@ -133,7 +133,7 @@ namespace Java2Dotnet.Spider.Core
 		{
 			lock (this)
 			{
-				_startRequests.Clear();
+				StartRequests.Clear();
 				GC.Collect();
 			}
 		}
@@ -188,7 +188,7 @@ namespace Java2Dotnet.Spider.Core
 		{
 			lock (this)
 			{
-				_startRequests.Add(startRequest);
+				StartRequests.Add(startRequest);
 				if (Domain == null)
 				{
 					Domain = startRequest.Url.Host;
@@ -220,7 +220,7 @@ namespace Java2Dotnet.Spider.Core
 					", userAgent='" + UserAgent + '\'' +
 					", cookies=" + Cookie +
 					", charset='" + Encoding + '\'' +
-					", startRequests=" + _startRequests +
+					", startRequests=" + StartRequests +
 					", sleepTime=" + SleepTime +
 					", retryTimes=" + RetryTimes +
 					", cycleRetryTimes=" + CycleRetryTimes +

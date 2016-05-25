@@ -30,6 +30,7 @@ namespace Java2Dotnet.Spider.Core
 		public int Deep { get; set; } = int.MaxValue;
 		public AutomicLong FinishedPageCount { get; set; } = new AutomicLong(0);
 		public bool SpawnUrl { get; set; } = true;
+		public bool SkipWhenResultIsEmpty { get; set; } = false;
 		public DateTime StartTime { get; private set; }
 		public DateTime FinishedTime { get; private set; } = DateTime.MinValue;
 		public Site Site { get; private set; }
@@ -48,6 +49,7 @@ namespace Java2Dotnet.Spider.Core
 		public Dictionary<string, dynamic> Settings { get; } = new Dictionary<string, dynamic>();
 		public string UserId { get; }
 		public string TaskGroup { get; }
+		public bool IsExited { get; private set; }
 		protected readonly string DataRootDirectory;
 
 		protected IPageProcessor PageProcessor { get; set; }
@@ -58,8 +60,7 @@ namespace Java2Dotnet.Spider.Core
 		private int _waitCountLimit = 20;
 		private int _waitCount;
 		private bool _init;
-		private bool _exited;
-		private static readonly Regex IdentifyRegex = new Regex(@"^[\{\}\d\w\s-/]+$");
+		//private static readonly Regex IdentifyRegex = new Regex(@"^[\S]+$");
 		private static bool _printedInfo;
 		private FileInfo _errorRequestFile;
 
@@ -110,10 +111,10 @@ namespace Java2Dotnet.Spider.Core
 			}
 			else
 			{
-				if (!IdentifyRegex.IsMatch(identity))
-				{
-					throw new SpiderExceptoin("Task Identify only can contains A-Z a-z 0-9 _ -");
-				}
+				//if (!IdentifyRegex.IsMatch(identity))
+				//{
+				//	throw new SpiderExceptoin("任务ID不能有空字符.");
+				//}
 				Identity = identity;
 			}
 
@@ -174,13 +175,13 @@ namespace Java2Dotnet.Spider.Core
 		/// <param name="emptySleepTime"></param>
 		public void SetEmptySleepTime(int emptySleepTime)
 		{
-			if (emptySleepTime >= 10000)
+			if (emptySleepTime >= 1000)
 			{
 				_waitCountLimit = emptySleepTime / WaitInterval;
 			}
 			else
 			{
-				throw new SpiderExceptoin("Sleep time should be large than 10000.");
+				throw new SpiderExceptoin("Sleep time should be large than 1000.");
 			}
 		}
 
@@ -301,8 +302,6 @@ namespace Java2Dotnet.Spider.Core
 		{
 			if (_init)
 			{
-				Logger.Info("Component already init.");
-
 				return;
 			}
 
@@ -326,7 +325,7 @@ namespace Java2Dotnet.Spider.Core
 			{
 				if (StartRequests.Count > 0)
 				{
-					Logger.Info($"Start push Request to queque,Count:{StartRequests.Count}");
+					Logger.Info($"添加网址到调度中心,数量: {StartRequests.Count}");
 					if ((Scheduler is QueueDuplicateRemovedScheduler) || (Scheduler is PriorityScheduler))
 					{
 						Parallel.ForEach(StartRequests, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, request =>
@@ -344,12 +343,10 @@ namespace Java2Dotnet.Spider.Core
 						Scheduler.Load(scheduler.ToList(this), this);
 						ClearStartRequests();
 					}
-
-					Logger.Info("Push Request to Scheduler success.");
 				}
 				else
 				{
-					Logger.Info("Push Zero Request to Scheduler.", true);
+					Logger.Info("不需要添加网址到调度中心.", true);
 				}
 			}
 
@@ -361,16 +358,14 @@ namespace Java2Dotnet.Spider.Core
 			CheckIfRunning();
 
 			Stat = Status.Running;
-			_exited = false;
+			IsExited = false;
 
 #if !NET_CORE
 			// 开启多线程支持
 			System.Net.ServicePointManager.DefaultConnectionLimit = 1000;
 #endif
-			Logger.Info("Spider " + Identity + " InitComponent...");
-			InitComponent();
 
-			Logger.Info("Spider " + Identity + " Started!");
+			InitComponent();
 
 			IMonitorableScheduler monitor = (IMonitorableScheduler)Scheduler;
 
@@ -429,7 +424,7 @@ namespace Java2Dotnet.Spider.Core
 						catch (Exception e)
 						{
 							OnError(request);
-							Logger.Error("Request " + request.Url + " failed.", e);
+							Logger.Error("采集失败: " + request.Url + ".", e);
 						}
 						finally
 						{
@@ -462,19 +457,24 @@ namespace Java2Dotnet.Spider.Core
 			{
 				OnClose();
 
-				Logger.Info($"Spider {Identity} Finished.");
+				Logger.Info($"任务 {Identity} 结束.");
 			}
 
 			if (Stat == Status.Stopped)
 			{
-				Logger.Info("Spider " + Identity + " stop success!");
+				Logger.Info("任务 " + Identity + " 停止成功!");
 			}
 
 			SpiderClosingEvent?.Invoke();
 
 			Log.WaitForExit();
 
-			_exited = true;
+			if (Stat == Status.Exited)
+			{
+				Logger.Info("任务 " + Identity + " 退出成功!");
+			}
+
+			IsExited = true;
 		}
 
 		public static void PrintInfo()
@@ -525,15 +525,17 @@ namespace Java2Dotnet.Spider.Core
 		public void Stop()
 		{
 			Stat = Status.Stopped;
-			Logger.Warn("Trying to stop Spider " + Identity + "...");
+			Logger.Warn("停止任务中 " + Identity + "...");
 		}
 
 		public void Exit()
 		{
 			Stat = Status.Exited;
-			Logger.Warn("Trying to exit Spider " + Identity + "...");
+			Logger.Warn("退出任务中 " + Identity + "...");
 			SpiderClosingEvent?.Invoke();
 		}
+
+		public bool IsExit { get; private set; }
 
 		protected void OnClose()
 		{
@@ -602,53 +604,57 @@ namespace Java2Dotnet.Spider.Core
 #if TEST
 			System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
 #endif
-			while (true)
+
+			try
 			{
-				try
+#if TEST
+				sw.Reset();
+				sw.Start();
+#endif
+				page = downloader.Download(request, this);
+
+#if TEST
+				sw.Stop();
+				Console.WriteLine("Download:" + (sw.ElapsedMilliseconds).ToString());
+#endif
+				if (page.IsSkip)
 				{
-#if TEST
-					sw.Reset();
-					sw.Start();
-#endif
-					page = downloader.Download(request, this);
-
-#if TEST
-					sw.Stop();
-					Console.WriteLine("Download:" + (sw.ElapsedMilliseconds).ToString());
-#endif
-					if (page.IsSkip)
-					{
-						return;
-					}
-
-					if (PageHandlers != null)
-					{
-						foreach (var pageHandler in PageHandlers)
-						{
-							pageHandler?.Invoke(page);
-						}
-					}
-
-#if TEST
-					sw.Reset();
-					sw.Start();
-#endif
-					PageProcessor.Process(page);
-#if TEST
-					sw.Stop();
-					Console.WriteLine("Process:" + (sw.ElapsedMilliseconds).ToString());
-#endif
-					break;
+					return;
 				}
-				catch (Exception e)
+
+				if (PageHandlers != null)
 				{
-					if (Site.CycleRetryTimes > 0)
+					foreach (var pageHandler in PageHandlers)
 					{
-						page = AddToCycleRetry(request, Site);
+						pageHandler?.Invoke(page);
 					}
-					Logger.Warn("Download or parse page " + request.Url + " failed:" + e);
-					break;
 				}
+
+#if TEST
+				sw.Reset();
+				sw.Start();
+#endif
+				PageProcessor.Process(page);
+#if TEST
+				sw.Stop();
+				Console.WriteLine("Process:" + (sw.ElapsedMilliseconds).ToString());
+#endif
+			}
+			catch (DownloadException de)
+			{
+				if (Site.CycleRetryTimes > 0)
+				{
+					page = AddToCycleRetry(request, Site);
+				}
+				Logger.Warn(de.Message);
+			}
+			catch (Exception e)
+			{
+				if (Site.CycleRetryTimes > 0)
+				{
+					page = AddToCycleRetry(request, Site);
+				}
+				Logger.Warn("解析页数数据失败: " + request.Url + ", 请检查您的数据抽取设置.");
 			}
 
 			//watch.Stop();
@@ -669,15 +675,13 @@ namespace Java2Dotnet.Spider.Core
 			//watch.Stop();
 			//Logger.Info("process cost time:" + watch.ElapsedMilliseconds);
 
-			if (page.MissTargetUrls)
+			if (!page.MissTargetUrls)
 			{
-				//Logger.Info("Stoper trigger worked on this page.");
+				if (!(SkipWhenResultIsEmpty && page.ResultItems.IsSkip))
+				{
+					ExtractAndAddRequests(page, SpawnUrl);
+				}
 			}
-			else
-			{
-				ExtractAndAddRequests(page, SpawnUrl);
-			}
-
 #if TEST
 			sw.Reset();
 			sw.Start();
@@ -688,22 +692,16 @@ namespace Java2Dotnet.Spider.Core
 				{
 					pipeline.Process(page.ResultItems, this);
 				}
-
-#if NET_CORE
-				Log.WriteLine($"Request: {request.Url} Sucess.");
-#else
-				Console.WriteLine($"Request: {request.Url} Sucess.");
-#endif
 			}
 			else
 			{
-				var message = $"Request {request.Url} 's result count is zero.";
+				var message = $"页面 {request.Url} 解析结果为 0.";
 				Logger.Warn(message);
 			}
+			Logger.Info($"采集: {request.Url} 成功.");
 #if TEST
 			sw.Stop();
 			Console.WriteLine("IPipeline:" + (sw.ElapsedMilliseconds).ToString());
-			Logger.Info($"Request: {request.Url} Sucess.");
 #endif
 		}
 
@@ -780,7 +778,7 @@ namespace Java2Dotnet.Spider.Core
 		private void ConsoleCancelKeyPress(object sender, ConsoleCancelEventArgs e)
 		{
 			Stop();
-			while (!_exited)
+			while (!IsExited)
 			{
 				Thread.Sleep(1500);
 			}
@@ -788,10 +786,12 @@ namespace Java2Dotnet.Spider.Core
 
 		public void Dispose()
 		{
-			if (!_exited)
+			while (!IsExited)
 			{
-				OnClose();
+				Thread.Sleep(500);
 			}
+
+			OnClose();
 		}
 	}
 }

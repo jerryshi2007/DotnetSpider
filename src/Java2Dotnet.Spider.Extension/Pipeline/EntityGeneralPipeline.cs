@@ -10,25 +10,26 @@ using Java2Dotnet.Spider.Extension.ORM;
 using Java2Dotnet.Spider.Extension.Utils;
 using Java2Dotnet.Spider.Common;
 using Java2Dotnet.Spider.Redial;
+using Java2Dotnet.Spider.Extension.Configuration;
 
 namespace Java2Dotnet.Spider.Extension.Pipeline
 {
 	public abstract class EntityGeneralPipeline : IEntityPipeline
 	{
-		public class Column
-		{
-			public string Name { get; set; }
-			public string DataType { get; set; }
+		//public class Column
+		//{
+		//	public string Name { get; set; }
+		//	public string DataType { get; set; }
 
-			public override string ToString()
-			{
-				return $"{Name},{DataType}";
-			}
-		}
+		//	public override string ToString()
+		//	{
+		//		return $"{Name},{DataType}";
+		//	}
+		//}
 
 		protected string ConnectString { get; set; }
-		protected readonly List<Column> Columns;
-		protected readonly List<Column> UpdateColumns = new List<Column>();
+		protected readonly List<Field> Columns;
+		protected readonly List<Field> UpdateColumns = new List<Field>();
 
 		protected abstract DbConnection CreateConnection();
 
@@ -44,19 +45,19 @@ namespace Java2Dotnet.Spider.Extension.Pipeline
 
 		protected List<List<string>> Indexs { get; set; } = new List<List<string>>();
 		protected List<List<string>> Uniques { get; set; } = new List<List<string>>();
-		protected List<Column> Primary { get; set; } = new List<Column>();
+		protected List<Field> Primary { get; set; } = new List<Field>();
 		protected string AutoIncrement { get; set; }
 
 		protected abstract string ConvertToDbType(string datatype);
 
-		protected EntityGeneralPipeline(Schema schema, JObject entityDefine, string connectString, PipelineMode mode = PipelineMode.Insert)
+		protected EntityGeneralPipeline(Schema schema, Entity entityDefine, string connectString, PipelineMode mode = PipelineMode.Insert)
 		{
 			Mode = mode;
 			ConnectString = connectString;
 
 			Schema = GenerateSchema(schema);
-			Columns = entityDefine.SelectTokens("$.Fields[*]").Select(j => j.ToObject<Column>()).Where(c => !string.IsNullOrEmpty(c.DataType)).ToList();
-			var primary = entityDefine.SelectToken("$.Primary")?.ToObject<List<string>>();
+			Columns = entityDefine.Fields.Where(f => f.DataType != null).ToList();
+			var primary = entityDefine.Primary;
 			if (primary != null)
 			{
 				foreach (var p in primary)
@@ -73,10 +74,9 @@ namespace Java2Dotnet.Spider.Extension.Pipeline
 				}
 			}
 
-			if (mode == PipelineMode.Update)
+			if (mode == PipelineMode.Update && entityDefine.Updates != null)
 			{
-				var tmpUpdateColumns = entityDefine.SelectTokens("$.Update[*]").Select(u => u.ToString()).ToList();
-				foreach (var column in tmpUpdateColumns)
+				foreach (var column in entityDefine.Updates)
 				{
 					var col = Columns.FirstOrDefault(c => c.Name == column);
 					if (col == null)
@@ -99,47 +99,52 @@ namespace Java2Dotnet.Spider.Extension.Pipeline
 				}
 			}
 
-			AutoIncrement = entityDefine.SelectToken("$.AutoIncrement")?.ToString();
+			AutoIncrement = entityDefine.AutoIncrement;
 
-			foreach (var index in entityDefine.SelectTokens("$.Indexs[*]"))
+			if (entityDefine.Indexes != null)
 			{
-				List<string> tmpIndex = new List<string>();
-				foreach (var i in index.ToObject<List<string>>())
+				foreach (var index in entityDefine.Indexes)
 				{
-					var col = Columns.FirstOrDefault(c => c.Name == i);
-					if (col == null)
+					List<string> tmpIndex = new List<string>();
+					foreach (var i in index)
 					{
-						throw new SpiderExceptoin("Columns set as index is not a property of your entity.");
+						var col = Columns.FirstOrDefault(c => c.Name == i);
+						if (col == null)
+						{
+							throw new SpiderExceptoin("Columns set as index is not a property of your entity.");
+						}
+						else
+						{
+							tmpIndex.Add(col.Name);
+						}
 					}
-					else
+					if (tmpIndex.Count != 0)
 					{
-						tmpIndex.Add(col.Name);
+						Indexs.Add(tmpIndex);
 					}
-				}
-				if (tmpIndex.Count != 0)
-				{
-					Indexs.Add(tmpIndex);
 				}
 			}
-
-			foreach (var unique in entityDefine.SelectTokens("$.Uniques[*]"))
+			if (entityDefine.Uniques != null)
 			{
-				List<string> tmpUnique = new List<string>();
-				foreach (var i in unique.ToObject<List<string>>())
+				foreach (var unique in entityDefine.Uniques)
 				{
-					var col = Columns.FirstOrDefault(c => c.Name == i);
-					if (col == null)
+					List<string> tmpUnique = new List<string>();
+					foreach (var i in unique)
 					{
-						throw new SpiderExceptoin("Columns set as unique is not a property of your entity.");
+						var col = Columns.FirstOrDefault(c => c.Name == i);
+						if (col == null)
+						{
+							throw new SpiderExceptoin("Columns set as unique is not a property of your entity.");
+						}
+						else
+						{
+							tmpUnique.Add(col.Name);
+						}
 					}
-					else
+					if (tmpUnique.Count != 0)
 					{
-						tmpUnique.Add(col.Name);
+						Uniques.Add(tmpUnique);
 					}
-				}
-				if (tmpUnique.Count != 0)
-				{
-					Uniques.Add(tmpUnique);
 				}
 			}
 		}

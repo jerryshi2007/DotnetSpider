@@ -6,6 +6,13 @@ using Java2Dotnet.Spider.JLog;
 
 namespace Java2Dotnet.Spider.Core.Downloader
 {
+	public class DownloadException : Exception
+	{
+		public DownloadException(string message) : base(message)
+		{
+		}
+	}
+
 	public class BaseDownloader : IDownloader, IDisposable
 	{
 		public DownloadValidation DownloadValidation { get; set; }
@@ -61,6 +68,10 @@ namespace Java2Dotnet.Spider.Core.Downloader
 					case DownloadValidationResult.FailedAndNeedRetryOrWait:
 						{
 							throw new SpiderExceptoin("Need retry.");
+						}
+					case DownloadValidationResult.FailedAndNeedWaitToVerifyCode:
+						{
+							throw new SpiderExceptoin("Need Verify Code.");
 						}
 					case DownloadValidationResult.Miss:
 						{

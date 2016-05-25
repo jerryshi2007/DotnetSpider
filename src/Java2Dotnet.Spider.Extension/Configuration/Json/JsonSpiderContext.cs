@@ -3,6 +3,7 @@ using Java2Dotnet.Spider.Core;
 using Java2Dotnet.Spider.Extension.Model.Formatter;
 using Newtonsoft.Json.Linq;
 using Java2Dotnet.Spider.Validation;
+using System.Linq;
 
 namespace Java2Dotnet.Spider.Extension.Configuration.Json
 {
@@ -14,6 +15,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 		public int ThreadNum { get; set; } = 1;
 		public int Deep { get; set; } = int.MaxValue;
 		public int EmptySleepTime { get; set; } = 15000;
+		public bool SkipWhenResultIsEmpty { get; set; } = false;
 		public int CachedSize { get; set; } = 1;
 		public JObject Scheduler { get; set; }
 		public JObject Downloader { get; set; }
@@ -23,9 +25,10 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 		public List<JObject> PrepareStartUrls { get; set; }
 		public List<EnviromentValue> EnviromentValues { get; set; }
 		public Dictionary<string, Dictionary<string, object>> StartUrls { get; set; } = new Dictionary<string, Dictionary<string, object>>();
+		public List<JObject> TargetUrlExtractInfos { get; set; }
 
 		public JObject Pipeline { get; set; }
-		public List<JObject> Entities { get; set; } = new List<JObject>();
+		public List<Entity> Entities { get; set; } = new List<Entity>();
 		public List<JObject> PageHandlers { get; set; }
 		public JObject TargetUrlsHandler { get; set; }
 		public JObject Validations { get; set; }
@@ -40,6 +43,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 			context.Downloader = GetDownloader(Downloader);
 			context.EmptySleepTime = EmptySleepTime;
 			context.Entities = Entities;
+			context.SkipWhenResultIsEmpty = SkipWhenResultIsEmpty;
 			context.NetworkValidater = GetNetworkValidater(NetworkValidater);
 			context.Pipeline = GetPipepine(Pipeline);
 			context.PrepareStartUrls = GetPrepareStartUrls(PrepareStartUrls);
@@ -53,7 +57,27 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 			context.Validations = GetValidations(Validations);
 			context.UserId = UserId;
 			context.TaskGroup = TaskGroup;
+			context.TargetUrlExtractInfos = GetTargetUrlExtractInfos(TargetUrlExtractInfos);
 			return context;
+		}
+
+		private List<TargetUrlExtractor> GetTargetUrlExtractInfos(List<JObject> targetUrlExtractInfos)
+		{
+			List<TargetUrlExtractor> list = new List<TargetUrlExtractor>();
+			foreach (var obj in targetUrlExtractInfos)
+			{
+				TargetUrlExtractor t = new TargetUrlExtractor();
+				t.Patterns = obj.SelectTokens("$.Patterns[*]").Select(p => p.ToString()).ToList();
+				t.Region = obj.SelectToken("$.Region").ToObject<Selector>();
+				foreach (var format in obj.SelectTokens("$.Formatters[*]"))
+				{
+					var name = format.SelectToken("$.Name").ToString();
+					var formatterType = FormatterFactory.GetFormatterType(name);
+					t.Formatters.Add((Formatter)format.ToObject(formatterType));
+				}
+				list.Add(t);
+			}
+			return list;
 		}
 
 		private Validations GetValidations(JObject validations)
@@ -229,9 +253,9 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 
 				switch (type)
 				{
-					case Configuration.PrepareStartUrls.Types.GeneralDb:
+					case Configuration.PrepareStartUrls.Types.ConfigDb:
 						{
-							var generalDbPrepareStartUrls = new DbPrepareStartUrls();
+							var generalDbPrepareStartUrls = new ConfigurableDbPrepareStartUrls();
 							SetDbPrepareStartUrls(generalDbPrepareStartUrls, jobject);
 
 							list.Add(generalDbPrepareStartUrls);
@@ -263,13 +287,33 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 							list.Add(jobject.ToObject<LinkSpiderPrepareStartUrls>());
 							break;
 						}
+					case Configuration.PrepareStartUrls.Types.Base:
+						{
+							var generalDbPrepareStartUrls = new BaseDbPrepareStartUrls();
+							foreach (var column in jobject.SelectTokens("$.Columns[*]"))
+							{
+								var c = new ConfigurableDbPrepareStartUrls.Column()
+								{
+									Name = column.SelectToken("$.Name").ToString()
+								};
+								foreach (var format in column.SelectTokens("$.Formatters[*]"))
+								{
+									var name = format.SelectToken("$.Name").ToString();
+									var formatterType = FormatterFactory.GetFormatterType(name);
+									c.Formatters.Add((Formatter)format.ToObject(formatterType));
+								}
+								generalDbPrepareStartUrls.Columns.Add(c);
+							}
+							list.Add(generalDbPrepareStartUrls);
+							break;
+						}
 				}
 			}
 
 			return list;
 		}
 
-		private void SetDbPrepareStartUrls(AbstractDbPrepareStartUrls generalDbPrepareStartUrls, JObject jobject)
+		private void SetDbPrepareStartUrls(ConfigurableDbPrepareStartUrls generalDbPrepareStartUrls, JObject jobject)
 		{
 			generalDbPrepareStartUrls.ConnectString = jobject.SelectToken("$.ConnectString")?.ToString();
 			generalDbPrepareStartUrls.Filters = jobject.SelectToken("$.Filters")?.ToObject<List<string>>();
@@ -280,7 +324,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 			generalDbPrepareStartUrls.Source = jobject.SelectToken("$.Source").ToObject<DataSource>();
 			foreach (var column in jobject.SelectTokens("$.Columns[*]"))
 			{
-				var c = new AbstractDbPrepareStartUrls.Column()
+				var c = new ConfigurableDbPrepareStartUrls.Column()
 				{
 					Name = column.SelectToken("$.Name").ToString()
 				};
@@ -310,12 +354,12 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 
 			switch (pipelineType)
 			{
-				#if !NET_CORE
+#if !NET_CORE
 				case Configuration.Pipeline.Types.MongoDb:
 					{
 						return pipeline.ToObject<MongoDbPipeline>();
 					}
-					#endif
+#endif
 				case Configuration.Pipeline.Types.MySql:
 					{
 						return pipeline.ToObject<MysqlPipeline>();
@@ -323,6 +367,10 @@ namespace Java2Dotnet.Spider.Extension.Configuration.Json
 				case Configuration.Pipeline.Types.MySqlFile:
 					{
 						return pipeline.ToObject<MysqlFilePipeline>();
+					}
+				case Configuration.Pipeline.Types.TestMongoDb:
+					{
+						return pipeline.ToObject<TestMongoDbPipeline>();
 					}
 			}
 

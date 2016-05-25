@@ -1,4 +1,4 @@
-﻿#if NET_45
+﻿#if !NET_CORE
 
 using System.Collections.Generic;
 using Java2Dotnet.Spider.Core;
@@ -35,11 +35,6 @@ namespace Java2Dotnet.Spider.Extension.Pipeline
 				reslut.Add(item);
 			}
 			_collection.InsertMany(reslut);
-		}
-
-		public class Person
-		{
-			public string Name { get; set; }
 		}
 
 		public void Dispose()

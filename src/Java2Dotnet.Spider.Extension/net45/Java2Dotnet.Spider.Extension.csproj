@@ -89,6 +89,9 @@
     <Compile Include="..\Configuration\DownloadValidation.cs">
       <Link>Configuration\DownloadValidation.cs</Link>
     </Compile>
+    <Compile Include="..\Configuration\Entity.cs">
+      <Link>Configuration\Entity.cs</Link>
+    </Compile>
     <Compile Include="..\Configuration\EnviromentValue.cs">
       <Link>Configuration\EnviromentValue.cs</Link>
     </Compile>
@@ -133,6 +136,9 @@
     </Compile>
     <Compile Include="..\Configuration\SpiderContextValidation.cs">
       <Link>Configuration\SpiderContextValidation.cs</Link>
+    </Compile>
+    <Compile Include="..\Configuration\TargetUrlExtractor.cs">
+      <Link>Configuration\TargetUrlExtractor.cs</Link>
     </Compile>
     <Compile Include="..\Configuration\TargetUrlsHandler.cs">
       <Link>Configuration\TargetUrlsHandler.cs</Link>
@@ -242,6 +248,9 @@
     <Compile Include="..\Model\Formatter\SubStringFormater.cs">
       <Link>Model\Formatter\SubStringFormater.cs</Link>
     </Compile>
+    <Compile Include="..\Model\Formatter\TimeStampFormater.cs">
+      <Link>Model\Formatter\TimeStampFormater.cs</Link>
+    </Compile>
     <Compile Include="..\Model\Formatter\UrlEncodeFormater.cs">
       <Link>Model\Formatter\UrlEncodeFormater.cs</Link>
     </Compile>
@@ -301,6 +310,9 @@
     </Compile>
     <Compile Include="..\Pipeline\EntityPipeline.cs">
       <Link>Pipeline\EntityPipeline.cs</Link>
+    </Compile>
+    <Compile Include="..\Pipeline\EntityTestMongoDbPipeline.cs">
+      <Link>Pipeline\EntityTestMongoDbPipeline.cs</Link>
     </Compile>
     <Compile Include="..\Pipeline\IEntityCollectorPipeline.cs">
       <Link>Pipeline\IEntityCollectorPipeline.cs</Link>

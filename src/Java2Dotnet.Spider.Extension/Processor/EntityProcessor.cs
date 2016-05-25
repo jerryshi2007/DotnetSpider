@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Linq;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Java2Dotnet.Spider.Core;
@@ -7,6 +8,8 @@ using Java2Dotnet.Spider.Core.Processor;
 using Java2Dotnet.Spider.Extension.Model;
 using Newtonsoft.Json.Linq;
 using Site = Java2Dotnet.Spider.Core.Site;
+using Java2Dotnet.Spider.Extension.Model.Formatter;
+using Java2Dotnet.Spider.Extension.Configuration;
 #if !NET_CORE
 using System.Web;
 #else
@@ -19,6 +22,8 @@ namespace Java2Dotnet.Spider.Extension.Processor
 	{
 		protected readonly IList<IEntityExtractor> EntityExtractorList = new List<IEntityExtractor>();
 		public Func<Page, IList<Request>> GetCustomizeTargetUrls;
+		public List<Model.TargetUrlExtractor> TargetUrlExtractInfos { get; set; }
+
 		private readonly SpiderContext _spiderContext;
 
 		public EntityProcessor(SpiderContext spiderContext)
@@ -27,14 +32,14 @@ namespace Java2Dotnet.Spider.Extension.Processor
 			_spiderContext = spiderContext;
 		}
 
-		public void AddEntity(JObject entityDefine)
+		public void AddEntity(Entity entityDefine)
 		{
 			EntityExtractorList.Add(GenerateExtractor(entityDefine));
 		}
 
-		private IEntityExtractor GenerateExtractor(JObject entityDefine)
+		private IEntityExtractor GenerateExtractor(Entity entityDefine)
 		{
-			return new EntityExtractor(entityDefine.SelectToken("$.Identity").ToString(), _spiderContext.EnviromentValues, entityDefine);
+			return new EntityExtractor(entityDefine.Identity, _spiderContext.EnviromentValues, entityDefine);
 		}
 
 		public void Process(Page page)
@@ -43,24 +48,24 @@ namespace Java2Dotnet.Spider.Extension.Processor
 			{
 				dynamic process = pageModelExtractor.Process(page);
 
-				if (!page.MissTargetUrls)
-				{
-					if (GetCustomizeTargetUrls == null)
-					{
-						ExtractLinks(page, pageModelExtractor.TargetUrlExtractInfos);
-					}
-					else
-					{
-						page.AddTargetRequests(GetCustomizeTargetUrls(page));
-					}
-				}
-
 				if (process == null || (process is IEnumerable && !((IEnumerable)process).GetEnumerator().MoveNext()))
 				{
 					continue;
 				}
 
 				page.AddResultItem(pageModelExtractor.EntityName, process);
+			}
+
+			if (!page.MissTargetUrls)
+			{
+				if (GetCustomizeTargetUrls == null)
+				{
+					ExtractLinks(page, TargetUrlExtractInfos);
+				}
+				else
+				{
+					page.AddTargetRequests(GetCustomizeTargetUrls(page));
+				}
 			}
 
 			if (page.ResultItems.Results.Count == 0)
@@ -74,12 +79,17 @@ namespace Java2Dotnet.Spider.Extension.Processor
 		/// </summary>
 		/// <param name="page"></param>
 		/// <param name="targetUrlExtractInfos"></param>
-		private void ExtractLinks(Page page, List<TargetUrlExtractInfo> targetUrlExtractInfos)
+		private void ExtractLinks(Page page, List<Model.TargetUrlExtractor> targetUrlExtractInfos)
 		{
+			if (targetUrlExtractInfos == null)
+			{
+				return;
+			}
+
 			foreach (var targetUrlExtractInfo in targetUrlExtractInfos)
 			{
-				var urlRegionSelector = targetUrlExtractInfo.TargetUrlRegionSelector;
-				var formatter = targetUrlExtractInfo.TargetUrlFormatter;
+				var urlRegionSelector = targetUrlExtractInfo.Region;
+				var formatters = targetUrlExtractInfo.Formatters;
 				var urlPatterns = targetUrlExtractInfo.Patterns;
 
 				var links = urlRegionSelector == null ? page.Selectable.Links().GetValue() : (page.Selectable.SelectList(urlRegionSelector)).Links().GetValue();
@@ -89,12 +99,17 @@ namespace Java2Dotnet.Spider.Extension.Processor
 				}
 
 				// check: 仔细考虑是放在前面, 还是在后面做 formatter, 我倾向于在前面. 对targetUrl做formatter则表示Start Url也应该是要符合这个规则的。
-				if (formatter != null)
+				if (formatters != null && formatters.Count > 0)
 				{
 					List<string> tmp = new List<string>();
-					foreach (var link in links)
+					foreach (string link in links)
 					{
-						tmp.Add(formatter.Formate(link));
+						var url = link.Clone().ToString();
+						foreach (Formatter f in formatters)
+						{
+							url = f.Formate(url);
+						}
+						tmp.Add(url);
 					}
 					links = tmp;
 				}

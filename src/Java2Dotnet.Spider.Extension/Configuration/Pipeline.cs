@@ -11,17 +11,18 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 		[Flags]
 		public enum Types
 		{
-			Console,
-			MongoDb,
-			MySql,
-			MsSql,
-			JsonFile,
-			MySqlFile
+			Console = 1,
+			TestMongoDb = 2,
+			MongoDb = 3,
+			MySql = 4,
+			MsSql = 5,
+			JsonFile = 6,
+			MySqlFile = 7
 		}
 
 		public abstract Types Type { get; internal set; }
 
-		public abstract IEntityPipeline GetPipeline(Schema schema, JObject entityDefine);
+		public abstract IEntityPipeline GetPipeline(Schema schema, Entity entityDefine);
 	}
 
 #if !NET_CORE
@@ -31,9 +32,23 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 
 		public string ConnectString { get; set; }
 
-		public override IEntityPipeline GetPipeline(Schema schema, JObject entityDefine)
+		public override IEntityPipeline GetPipeline(Schema schema, Entity entityDefine)
 		{
 			return new EntityMongoDbPipeline(schema, ConnectString);
+		}
+	}
+
+	public class TestMongoDbPipeline : Pipeline
+	{
+		public override Types Type { get; internal set; } = Types.TestMongoDb;
+
+		public string ConnectString { get; set; }
+
+		public string TaskId { get; set; }
+
+		public override IEntityPipeline GetPipeline(Schema schema, Entity entityDefine)
+		{
+			return new EntityTestMongoDbPipeline(TaskId, schema, ConnectString);
 		}
 	}
 #endif
@@ -42,7 +57,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 	{
 		public override Types Type { get; internal set; } = Types.MySqlFile;
 
-		public override IEntityPipeline GetPipeline(Schema schema, JObject entityDefine)
+		public override IEntityPipeline GetPipeline(Schema schema, Entity entityDefine)
 		{
 			return new EntityMySqlFilePipeline(schema, entityDefine);
 		}
@@ -56,7 +71,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 
 		public string ConnectString { get; set; }
 
-		public override IEntityPipeline GetPipeline(Schema schema, JObject entityDefine)
+		public override IEntityPipeline GetPipeline(Schema schema, Entity entityDefine)
 		{
 			return new EntityMySqlPipeline(schema, entityDefine, ConnectString, Mode);
 		}
@@ -66,7 +81,7 @@ namespace Java2Dotnet.Spider.Extension.Configuration
 	{
 		public override Types Type { get; internal set; } = Types.Console;
 
-		public override IEntityPipeline GetPipeline(Schema schema, JObject entityDefine)
+		public override IEntityPipeline GetPipeline(Schema schema, Entity entityDefine)
 		{
 			return new EntityConsolePipeline();
 		}
